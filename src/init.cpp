@@ -114,6 +114,7 @@ void Shutdown()
         bitdb.Flush(false);
     GenerateBitcoins(false, NULL, 0);
     StopNode();
+    mempool.Write();
     {
         LOCK(cs_main);
         if (pwalletMain)
@@ -898,6 +899,21 @@ bool AppInit2(boost::thread_group& threadGroup, bool fForceServer)
         if (nFound == 0)
             LogPrintf("No blocks matching %s were found\n", strMatch.c_str());
         return false;
+    }
+
+    // It is OK if mempool.Read() fails; starting out with an empty memory pool is not
+    // a problem, it gets filled quickly.
+    list<CTxMemPoolEntry> mempoolEntries;
+    if (mempool.Read(mempoolEntries) && !empty(mempoolEntries))
+    {
+        CValidationState valState;
+        bool fMissingInputs;
+        BOOST_FOREACH(CTxMemPoolEntry& mempoolEntry, mempoolEntries)
+        {
+            AcceptToMemoryPool(mempool, valState, mempoolEntry.GetTx(), false,
+                               &fMissingInputs, false);
+        }
+        LogPrintf("Accepted %lu mempool transactions\n", mempool.size());
     }
 
     // ********************************************************* Step 8: load wallet
